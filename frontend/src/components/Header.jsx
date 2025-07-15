@@ -11,7 +11,8 @@ const navLinks = [
   { name: 'Programs', path: '/programs' },
   { name: 'Contact Us', path: '/contact-us' },
   { name: 'Live Cricket', path: '/live-cricket-score' },
-  { name: 'Live TV', path: '/live-tv' }
+  { name: 'Live TV', path: '/live-tv' },
+  { name: 'Admin login', path: '/admin/login' }
 ];
 
 const Header = () => {
