@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/news'; // adjust if needed
+const API_URL = 'https://abbtakk-website-full-clone-production.up.railway.app/api/news'; // adjust if needed
 
 export const loginAdmin = async (email, password) => {
-  const res = await axios.post('http://localhost:5000/api/admin/login', {
+  const res = await axios.post('https://abbtakk-website-full-clone-production.up.railway.app/api/admin/login', {
     email,
     password,
   });

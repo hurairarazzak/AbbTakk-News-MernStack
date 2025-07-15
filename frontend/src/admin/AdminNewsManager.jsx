@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-const API_URL = "https://abb-takk-news-website-diuw.vercel.app/api/news";
+const API_URL = "https://abbtakk-website-full-clone-production.up.railway.app/api/news";
 
 const AdminNewsManager = () => {
     const [newsList, setNewsList] = useState([]);
