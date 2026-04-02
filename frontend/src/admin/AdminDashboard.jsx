@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const API_URL = 'https://abbtakk-website-full-clone-production.up.railway.app/api/news';
+const API_URL = 'https://abbtakknewswebsite-production.up.railway.app/api/news';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
