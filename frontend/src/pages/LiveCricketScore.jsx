@@ -1,4 +1,4 @@
-import LiveCricketScore from '../components/LiveScore';
+import LiveScore from '../components/LiveScore';
 
 function HomePage() {
   return (
@@ -7,3 +7,5 @@ function HomePage() {
     </div>
   );
 }
+
+export default HomePage;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
-const API_URL = "https://abbtakknewswebsite-production.up.railway.app/api/news";
+const API_URL = "http://localhost:5000/api/news";
 
 const AdminNewsManager = () => {
     const [newsList, setNewsList] = useState([]);
@@ -110,7 +110,7 @@ const AdminNewsManager = () => {
 
     return (
         <div className="max-w-5xl mx-auto p-8 mt-10 bg-white rounded-lg shadow-2xl border border-gray-200">
-            <h2 className="text-3xl font-bold mb-8 text-[#dd3333] tracking-wide">📝 Upload News</h2>
+            <h2 className="text-3xl font-bold mb-8 text-[#dd3333] tracking-wide">Upload News</h2>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
@@ -200,7 +200,7 @@ const AdminNewsManager = () => {
                         type="submit"
                         className="bg-[#dd3333] w-full text-white py-3 rounded-md font-semibold hover:bg-red-700 transition"
                     >
-                        ✅ Publish News
+                        Publish News
                     </button>
                 </div>
             </form>

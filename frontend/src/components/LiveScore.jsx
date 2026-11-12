@@ -1,122 +1,174 @@
-import React from 'react'
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 
-const teamFlags = {
-  "India": "https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg",
-  "Pakistan": "https://upload.wikimedia.org/wikipedia/commons/3/32/Flag_of_Pakistan.svg",
-  "England": "https://upload.wikimedia.org/wikipedia/en/b/be/Flag_of_England.svg",
-  "Australia": "https://upload.wikimedia.org/wikipedia/en/b/b9/Flag_of_Australia.svg",
-  "South Africa": "https://upload.wikimedia.org/wikipedia/commons/a/af/Flag_of_South_Africa.svg",
-  "Sri Lanka": "https://upload.wikimedia.org/wikipedia/commons/1/11/Flag_of_Sri_Lanka.svg",
-  "Bangladesh": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Flag_of_Bangladesh.svg",
-  "New Zealand": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Flag_of_New_Zealand.svg",
-  "Afghanistan": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Flag_of_the_Taliban.svg",
-  "West Indies": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Flag_of_the_West_Indies_Cricket_Board.svg",
-  "Zimbabwe": "https://upload.wikimedia.org/wikipedia/commons/6/6a/Flag_of_Zimbabwe.svg",
-  "Ireland": "https://upload.wikimedia.org/wikipedia/commons/4/45/Flag_of_Ireland.svg",
-  "Nepal": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Flag_of_Nepal.svg",
-  "Netherlands": "https://upload.wikimedia.org/wikipedia/commons/2/20/Flag_of_the_Netherlands.svg",
+const API_KEY = "8929c4d6-09a3-49f6-9276-de9c6c340b95";
+const API_URL = `https://api.cricapi.com/v1/currentMatches?apikey=${API_KEY}&offset=0`;
+
+const MATCH_TYPE = "odi"; // "odi" | "t20" | "test"
+const POLL_MS = 10 * 60 * 1000; // 10 min = max ~144 calls/day per open tab, see note below
+const CACHE_KEY = "live-cricket-cache-v1";
+
+const readCache = () => {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY));
+  } catch {
+    return null;
+  }
 };
 
-const getFlag = (teamName) => teamFlags[teamName] || "";
+const writeCache = (match) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ match, time: Date.now() }));
+  } catch {}
+};
 
-const ODILiveScoreCard = () => {
-  const [match, setMatch] = useState(null);
+// Module-level, so React StrictMode's double effect doesn't fire two requests
+let inFlight = null;
 
-  const fetchODIMatch = async () => {
-    try {
-      const res = await fetch('https://cricbuzz-cricket.p.rapidapi.com/matches/v1/live', {
-        method: 'GET',
-        headers: {
-          'X-RapidAPI-Key': '8b49e500c3mshacabe2a256f5df0p14053bjsnabe36f2092f7',
-          'X-RapidAPI-Host': 'cricbuzz-cricket.p.rapidapi.com'
-        }
-      });
+const fetchMatch = async () => {
+  const res = await fetch(API_URL);
+  const json = await res.json();
 
-      const data = await res.json();
-      const all = data?.typeMatches?.flatMap(t => t.seriesMatches || []);
-      const allMatches = all.flatMap(series => series.seriesAdWrapper?.matches || []);
-      const odiMatch = allMatches.find(
-        m => m.matchInfo?.matchFormat === 'ODI' && m.matchScore
-      );
+  // CricAPI reports limit/key problems as status:"failure", often with HTTP 200
+  if (!res.ok || json.status === "failure") {
+    throw new Error(json.reason || `API Error: ${res.status}`);
+  }
 
-      setMatch(odiMatch || null);
-    } catch (err) {
-      console.error('Error fetching ODI match:', err);
-    }
-  };
+  console.log("CRICAPI RESPONSE:", json); // check the real shape here
+
+  const matches = json.data || [];
+  const ofType = matches.filter(
+    (m) => String(m.matchType || "").toLowerCase() === MATCH_TYPE
+  );
+
+  // Prefer a live match, then fall back to the most recent one of that type
+  return (
+    ofType.find((m) => m.matchStarted && !m.matchEnded) || ofType[0] || null
+  );
+};
+
+const getScore = (match, teamName) =>
+  (match.score || []).find((s) =>
+    String(s.inning || "").toLowerCase().includes(teamName.toLowerCase())
+  );
+
+const TeamScore = ({ name, img, score }) => (
+  <div className="flex flex-col items-center w-full md:w-1/3">
+    {img && (
+      <img src={img} alt={name} className="w-12 h-9 mb-2 object-contain border" />
+    )}
+    <p className="font-semibold">{name}</p>
+    <p className="text-xl font-bold text-gray-800">
+      {score ? `${score.r}/${score.w}` : "Yet to bat"}
+    </p>
+    <p className="text-xs text-gray-500">{score?.o ? `(${score.o} ov)` : ""}</p>
+  </div>
+);
+
+const Box = ({ title, children }) => (
+  <div className="bg-white border border-red-600 rounded-2xl p-6 max-w-4xl mx-auto mt-10 text-center shadow-lg">
+    <h2 className="text-xl font-bold text-red-600">{title}</h2>
+    <div className="text-sm text-gray-600 mt-2">{children}</div>
+  </div>
+);
+
+const LiveScore = () => {
+  const cached = readCache();
+  const [match, setMatch] = useState(cached?.match || null);
+  const [updatedAt, setUpdatedAt] = useState(cached ? new Date(cached.time) : null);
+  const [loading, setLoading] = useState(!cached);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchODIMatch();
-    const interval = setInterval(fetchODIMatch, 15000);
-    return () => clearInterval(interval);
+    let timer;
+    let cancelled = false;
+
+    const load = async () => {
+      // Skip the request if cached data is still fresh
+      const c = readCache();
+      if (c && Date.now() - c.time < POLL_MS) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        inFlight = inFlight || fetchMatch().finally(() => (inFlight = null));
+        const m = await inFlight;
+        if (cancelled) return;
+        writeCache(m);
+        setMatch(m);
+        setUpdatedAt(new Date());
+        setError("");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err.message);
+        clearInterval(timer); // don't keep hitting a blocked key
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    const start = () => {
+      load();
+      timer = setInterval(load, POLL_MS);
+    };
+
+    const onVisibility = () => {
+      clearInterval(timer);
+      if (!document.hidden) start();
+    };
+
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
-  if (!match) return null;
+  if (loading) return <Box title="Live Scores">Loading...</Box>;
+  if (!match && error) return <Box title="Unable to Load Live Scores">{error}</Box>;
+  if (!match)
+    return <Box title="Live Scores">No {MATCH_TYPE.toUpperCase()} match available right now.</Box>;
 
-  const { team1, team2, matchFormat, status, tossResults } = match.matchInfo;
-  const score1 = match.matchScore?.team1Score?.inngs1;
-  const score2 = match.matchScore?.team2Score?.inngs1;
+  const [t1, t2] = match.teams || [];
+  const info = (name) => (match.teamInfo || []).find((t) => t.name === name);
+  const isLive = match.matchStarted && !match.matchEnded;
 
   return (
     <div className="bg-white border border-red-600 rounded-2xl p-6 max-w-4xl mx-auto mt-10 shadow-lg">
-      <div className="text-center mb-4">
-        <h2 className="text-xl md:text-2xl font-bold text-red-600">
-          {team1?.teamName} vs {team2?.teamName}
-        </h2>
-      </div>
+      <h2 className="text-center text-xl md:text-2xl font-bold text-red-600 mb-4">
+        {t1} vs {t2}
+      </h2>
 
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        {/* Team 1 */}
-        <div className="flex flex-col items-center w-full md:w-1/3">
-          <img
-            src={getFlag(team1?.teamName)}
-            alt={team1?.teamName}
-            className="w-12 h-12 mb-1 rounded-full border"
-            onError={(e) => (e.target.style.display = 'none')}
-          />
-          <p className="font-semibold">{team1?.teamName}</p>
-          <p className="text-xl font-bold text-gray-800">
-            {score1 ? `${score1.runs}/${score1.wickets}` : 'Yet to bat'}
-          </p>
-          <p className="text-xs text-gray-500">
-            {score1?.overs ? `(${score1.overs} ov)` : ''}
-          </p>
-        </div>
+        <TeamScore name={t1} img={info(t1)?.img} score={getScore(match, t1)} />
 
-        {/* Center Info */}
         <div className="text-center w-full md:w-1/3 border-t md:border-t-0 md:border-x border-gray-300 py-3 md:py-0">
-          <span className="inline-flex items-center justify-center bg-red-600 text-white text-xs font-semibold px-3 py-1 rounded-full mb-2">
-            ● Live
+          <span
+            className={`inline-flex items-center text-white text-xs font-semibold px-3 py-1 rounded-full mb-2 ${
+              isLive ? "bg-red-600" : "bg-gray-500"
+            }`}
+          >
+            {isLive ? "● Live" : match.matchEnded ? "Completed" : "Upcoming"}
           </span>
-          <p className="text-sm font-medium text-gray-700">{status}</p>
-          <p className="text-xs text-gray-500 mt-1">
-            {tossResults?.tossWinnerName
-              ? `${tossResults.tossWinnerName} chose to ${tossResults.decision}`
-              : 'Toss info N/A'}
+          <p className="text-sm font-medium text-gray-700">{match.status}</p>
+          <p className="text-xs text-gray-400 mt-1">{match.venue}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {match.matchType?.toUpperCase()} Match
           </p>
-          <p className="text-xs mt-1 text-gray-400">{matchFormat} Match</p>
+          {updatedAt && (
+            <p className="text-xs text-gray-400 mt-2">
+              Updated: {updatedAt.toLocaleTimeString()}
+              {error && " (delayed)"}
+            </p>
+          )}
         </div>
 
-        {/* Team 2 */}
-        <div className="flex flex-col items-center w-full md:w-1/3">
-          <img
-            src={getFlag(team2?.teamName)}
-            alt={team2?.teamName}
-            className="w-12 h-12 mb-1 rounded-full border"
-            onError={(e) => (e.target.style.display = 'none')}
-          />
-          <p className="font-semibold">{team2?.teamName}</p>
-          <p className="text-xl font-bold text-gray-800">
-            {score2 ? `${score2.runs}/${score2.wickets}` : 'Yet to bat'}
-          </p>
-          <p className="text-xs text-gray-500">
-            {score2?.overs ? `(${score2.overs} ov)` : ''}
-          </p>
-        </div>
+        <TeamScore name={t2} img={info(t2)?.img} score={getScore(match, t2)} />
       </div>
     </div>
   );
 };
 
-export default ODILiveScoreCard;
+export default LiveScore;

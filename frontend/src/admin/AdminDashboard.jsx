@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const API_URL = 'https://abbtakknewswebsite-production.up.railway.app/api/news';
+const API_URL = 'http://localhost:5000/api/news';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -57,19 +57,19 @@ const AdminDashboard = () => {
     <div className="p-6 bg-gray-100 min-h-screen">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-red-600">🛠️ Admin Dashboard</h1>
+        <h1 className="text-3xl font-bold text-red-600">Admin Dashboard</h1>
         <div className="flex gap-3">
           <button
             onClick={() => navigate('/admin/add-news')}
             className="bg-[#dd3333] text-white px-5 py-2 rounded-md font-medium hover:bg-red-700 transition"
           >
-            ➕ Add News
+            Add News
           </button>
           <button
             onClick={handleLogout}
             className="bg-gray-300 text-gray-800 px-5 py-2 rounded-md font-medium hover:bg-gray-400 transition"
           >
-            🚪 Logout
+            Logout
           </button>
         </div>
       </div>
@@ -92,7 +92,7 @@ const AdminDashboard = () => {
 
       {/* Table */}
       <div className="bg-white shadow rounded overflow-x-auto">
-        <h2 className="text-xl font-semibold px-4 py-4 border-b text-gray-800">📰 All News</h2>
+        <h2 className="text-xl font-semibold px-4 py-4 border-b text-gray-800">All News</h2>
         {news.length === 0 ? (
           <p className="text-center p-6 text-gray-500">No news available.</p>
         ) : (
@@ -111,7 +111,7 @@ const AdminDashboard = () => {
                 <tr key={item._id} className="border-t hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{item.title}</td>
                   <td className="px-4 py-3">{item.category || '—'}</td>
-                  <td className="px-4 py-3">{item.isPinned ? '✅' : '❌'}</td>
+                  <td className="px-4 py-3">{item.isPinned ? '✔' : '❌'}</td>
                   <td className="px-4 py-3">{item.isMostPopular ? '⭐' : '—'}</td>
                   <td className="px-4 py-3 text-center">
                     <button
